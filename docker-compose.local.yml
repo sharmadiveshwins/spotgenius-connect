@@ -1,0 +1,165 @@
+version: '3.8'
+
+services:
+  spot_connect:
+    build: .
+    restart: on-failure
+    healthcheck:
+      test: [ "CMD", "curl", "--silent", "--fail", "http://localhost:8001/docs" ]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    container_name: spot_connect
+    environment:
+      - SQLALCHEMY_DATABASE_URI
+      - SQLALCHEMY_POOL_SIZE
+      - SQLALCHEMY_POOL_MAX_OVERFLOW
+      - SECRET_KEY
+      - ALGORITHM
+      - SMTP_SERVER
+      - SMTP_PORT
+      - SMTP_USERNAME
+      - SMTP_PASSWORD
+      - EVENT_PICKING_LIMIT
+      - SPOT_GENIUS_API_BASE_URL
+      - TOKEN_FOR_CREATE_ALERT_API
+      - SIMULATION_PAYMENT_STATUS
+      - VIOLATION_GRACE_PERIOD
+      - PARK_PLAINT_BASE_URL
+      - PARK_PLAINT_AUTH_USER
+      - PARK_PLAINT_AUTH_PASSWORD
+      - ARRIVE_AUTH_KEY
+      - POSTGRES_DB
+      - POSTGRES_USER
+      - POSTGRES_PASSWORD
+      - POSTGRES_PORT
+      - POSTGRES_HOST
+      - TIBA_NPA_API_HOST
+      - TIBA_NPA_API_USERNAME
+      - TIBA_NPA_API_PASSWORD
+      - TIBA_NPA_API_COUNTERID
+      - TIBA_NPA_API_REASON
+      - TIBA_NPA_API_ADJUSTMENT
+      - DATA_TICKET_API_KEY
+    env_file:
+      - .env
+    ports:
+      - "8001:8001"
+    entrypoint: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001"]
+    volumes:
+      - ./app:/workspace/app
+    networks:
+      - observability-network
+
+
+  spot_connect_db:
+    image: postgres:14.9
+    restart: unless-stopped
+    container_name: spot_connect_db
+    ports:
+      - "5433:5433"
+    environment:
+      - SQLALCHEMY_DATABASE_URI
+      - SQLALCHEMY_POOL_SIZE
+      - SQLALCHEMY_POOL_MAX_OVERFLOW
+      - SECRET_KEY
+      - ALGORITHM
+      - SMTP_SERVER
+      - SMTP_PORT
+      - SMTP_USERNAME
+      - SMTP_PASSWORD
+      - EVENT_PICKING_LIMIT
+      - SPOT_GENIUS_API_BASE_URL
+      - TOKEN_FOR_CREATE_ALERT_API
+      - SIMULATION_PAYMENT_STATUS
+      - VIOLATION_GRACE_PERIOD
+      - PARK_PLAINT_BASE_URL
+      - PARK_PLAINT_AUTH_USER
+      - PARK_PLAINT_AUTH_PASSWORD
+      - ARRIVE_AUTH_KEY
+      - POSTGRES_DB
+      - POSTGRES_USER
+      - POSTGRES_PASSWORD
+      - POSTGRES_PORT
+      - POSTGRES_HOST
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - observability-network
+
+  redis:
+    image: "redis:alpine"
+    restart: unless-stopped
+    container_name: spot_connect_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./redis_data:/data
+    networks:
+      - observability-network
+
+  spotgenius_huey_bg_tasks_worker:
+    build: .
+    restart: on-failure
+    healthcheck:
+      test: [ "CMD", "curl", "--silent", "--fail", "http://spot_connect:8001/api/v1/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    container_name: spotgenius_connect_huey
+    entrypoint: ["/workspace/app/scripts/run_huey.sh"]
+    environment:
+      - SQLALCHEMY_DATABASE_URI
+      - SQLALCHEMY_POOL_SIZE
+      - SQLALCHEMY_POOL_MAX_OVERFLOW
+      - SECRET_KEY
+      - ALGORITHM
+      - SMTP_SERVER
+      - SMTP_PORT
+      - SMTP_USERNAME
+      - SMTP_PASSWORD
+      - EVENT_PICKING_LIMIT
+      - SPOT_GENIUS_API_BASE_URL
+      - TOKEN_FOR_CREATE_ALERT_API
+      - SIMULATION_PAYMENT_STATUS
+      - VIOLATION_GRACE_PERIOD
+      - PARK_PLAINT_BASE_URL
+      - PARK_PLAINT_AUTH_USER
+      - PARK_PLAINT_AUTH_PASSWORD
+      - ARRIVE_AUTH_KEY
+      - POSTGRES_DB
+      - POSTGRES_USER
+      - POSTGRES_PASSWORD
+      - POSTGRES_PORT
+      - POSTGRES_HOST
+    env_file:
+      - .env
+    depends_on:
+      - redis
+    volumes:
+      - ./app:/workspace/app
+    networks:
+      - observability-network
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: otel-collector
+    volumes:
+      - ./otel-collector-config.yml:/otel-collector-config.yml
+    networks:
+      - observability-network
+    ports:
+      - "4317:4317"   # OTLP gRPC receiver
+      - "4318:4318" # OTLP HTTP receiver
+    env_file:
+      - .env
+    command: ["--config", "/otel-collector-config.yml"]
+
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  observability-network:
+    external: true

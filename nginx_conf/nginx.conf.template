@@ -1,0 +1,69 @@
+# Custom logging format based on nginx default combined that includes request_time as well
+log_format timed_combined '$remote_addr - $remote_user [$time_local] '
+    '"$request" $status $body_bytes_sent '
+    '"$http_referer" "$http_user_agent" '
+    '$request_time $upstream_response_time $pipe';
+
+server {
+    # Listen to port 443 on both IPv4 and IPv6.
+    #listen 443 ssl default_server reuseport;
+    #listen [::]:443 ssl default_server reuseport;
+    listen 80 default_server reuseport;
+    listen [::]:80 default_server reuseport;
+
+
+    # Increase request timeout to 2 minutes (default value, override by env var)
+    proxy_read_timeout ${NGINX_REQUEST_TIMEOUT};
+    proxy_connect_timeout ${NGINX_REQUEST_TIMEOUT};
+    proxy_send_timeout ${NGINX_REQUEST_TIMEOUT};
+
+    # Save timed logging into log file
+    access_log /var/log/nginx/timed.access.log timed_combined;
+
+    # Enable Gzip compression for both backend responses and static assets.
+    gzip            on;
+    gzip_min_length 500;
+    gzip_proxied    any;
+    gzip_comp_level 4;
+    gzip_types      text/css text/javascript text/xml text/plain text/x-component application/javascript application/json application/xml application/rss+xml font/truetype font/opentype application/vnd.ms-fontobject image/svg+xml;
+    gzip_vary       on;
+    gzip_disable    "msie6";
+
+    # Allow uploading files and images of size upto 5MB.
+    client_max_body_size 5M;
+
+    # Domain names this server should respond to.
+    server_name ${NGINX_SERVER_NAME};
+
+    # Load the certificate files.
+     # ssl_certificate         /etc/letsencrypt/live/spot-genius-stgapi/fullchain.pem;
+     # ssl_certificate_key     /etc/letsencrypt/live/spot-genius-stgapi/privkey.pem;
+     # ssl_trusted_certificate /etc/letsencrypt/live/spot-genius-stgapi/chain.pem;
+
+    # Load the Diffie-Hellman parameter.
+     # ssl_dhparam /etc/letsencrypt/dhparams/dhparam.pem;
+
+    # Backend Server (redirect all api and docs requests to the backend server)
+    location /api {
+        proxy_pass    ${NGINX_BACKEND_REDIRECT_URL};
+    }
+    location /docs {
+        proxy_pass    ${NGINX_BACKEND_REDIRECT_URL};
+    }
+    location /openapi.json {
+        proxy_pass    ${NGINX_BACKEND_REDIRECT_URL};
+    }
+
+    # Static Assets (frontend hosting)
+     location /admin {
+         root ${NGINX_STATIC_ROOT};
+         # Serve /index.html when path not found (needed for vue router history mode)
+         try_files $uri $uri/ /admin/index.html;
+         autoindex on;
+     }
+
+    # Redirect to /admin by default when visiting base /
+    location / {
+        rewrite / /admin redirect;
+    }
+}

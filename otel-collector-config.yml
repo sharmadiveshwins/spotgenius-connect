@@ -1,0 +1,48 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: "0.0.0.0:4317"   # Bind to all interfaces
+      http:
+        endpoint: "0.0.0.0:4318"
+
+processors:
+  batch:
+    timeout: 5s
+    send_batch_size: 100
+
+exporters:
+  otlphttp:
+    endpoint: https://otlp.nr-data.net
+    headers:
+      api-key: "${NEW_RELIC_API_KEY}"
+    encoding: json
+
+  debug:
+    verbosity: detailed
+
+  otlp/jaeger:
+    endpoint: "jaeger:4317"
+    tls:
+      insecure: true
+
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlphttp, debug]
+
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlphttp, debug]
+
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlphttp, debug]

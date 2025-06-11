@@ -1,0 +1,18 @@
+trigger:
+- main
+
+jobs:
+- job: precommit
+  pool:
+    vmImage: ubuntu-latest
+
+  steps:
+  - task: UsePythonVersion@0
+    inputs:
+      versionSpec: '3.8'
+
+  - task: PublishPipelineArtifact@1
+    inputs:
+      targetPath: '$(Pipeline.Workspace)'
+      artifactType: 'pipeline'
+      artifactName: 'drop'
